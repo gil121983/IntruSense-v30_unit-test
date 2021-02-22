@@ -8,7 +8,13 @@ make sure the files are deleted after testing.
 
 # Testing Secopx Sensor
 
-Run all tests with:	--all 		
+Start tests by runnung: 
+	
+	$ sensor_test --<FEATURE_NAME>  -<OPTION>
+
+To tests all features add:	
+	
+			--all 		
 
 Or selective tests by adding options:
 
