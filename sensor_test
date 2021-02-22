@@ -8,43 +8,44 @@
 WEBSERVERDIR=$(sed -n -e 's/^.*WEBSERVER_DIR: //p' /opt/IntruSense-v30/secopx.conf);
 WORKDIR=$(pwd)
 IP=$(hostname -I | awk '{print $1}')
-DIST=$(cat /etc/*-release | head -n 1 )
+DIST=$(cat /etc/*-release | head -n 1)
 
-PKG_WITH_KNOWNCVE=""
-OUTDATED_PKG_LIST=""
+# Default apache2 paths
+MODS_DIR="/etc/apache2/mods-enabled"
 
-#NOT TESTED :: ModSecurity
+if [[ ${DIST} == "*Amazon*" || ${DIST} == "*CentOS*" ]];then MODS_DIR="/etc/httpd/"; fi
+
+#PKG_WITH_KNOWNCVE=""
+#OUTDATED_PKG_LIST=""
+#NOT TESTED :: ModSecurity Outdated CVE 
 # AIDE will be tested when any file is being created on the web server directory
 
+help_txt="
+Run all tests with:     --all           
+Or 
+Run selective tests:
+                        --chkrootkit
+                        --yara
+                        --webshells
+                        --coinscan
+                        --predictor
+                        --btmp
+                        --scalp
+                        --dos
+                        --cve
+                        --outdated
 
-if [[  "${1}" == "--help" || "${1}" == "-h" || $# -lt 2 || ! " $@ " =~ " -c " || ! " $@ " =~ " -d " ]];then
-	echo "
-Run all tests with:	--all 		
-Or selective tests by adding options:
-			--chkrootkit
-			--yara
-			--webshells
-			--coinscan
-			--predictor
-			--btmp
-			--scalp
-			--dos
-			--cve
-			--outdated
-
-You must add one of the options:
-			-c 	To creaet test	
-			-d	To delete test	
+Add one of the options:
+                        -c      Creaet test files
+                        -d      Delete test files
 "
-	exit 0
-fi
 
-if [[ " $@ " =~ " -c "]];then echo "Creating test files on ${IP}, Make sure secopx service is running."
-if [[ " $@ " =~ " -d "]];then echo "Deleting test files from ${IP}."
+if [[  "${1}" == "--help" || "${1}" == "-h" || $# -lt 2 || ! " $@ " =~ " -c " && ! " $@ " =~ " -d " ]];then echo "${help_txt}";exit 0;fi
+if [[ " $@ " =~ " -c " ]];then printf "Creating test files on ${IP},\nMake sure IP address is correct and Secopx service is running.\n";fi
+if [[ " $@ " =~ " -d " ]];then printf "Deleting test files from ${IP}.\n";fi
 
 if [[ " $@ " =~ " --chkrootkit " || " $@ " =~ " --all " ]];then
-        if [[ " $@ " =~ " -c " ]];then touch /tmp/ramen.tgz;
-        elif [[ " $@ " =~ " -d " ]];then rm /tmp/ramen.tgz; fi
+        if [[ " $@ " =~ " -c " ]];then touch /tmp/ramen.tgz;elif [[ " $@ " =~ " -d " ]];then rm /tmp/ramen.tgz; fi
 fi
 
 if [[  " $@ " =~ " --yara " || " $@ " =~ " --all " ]];then
@@ -67,23 +68,31 @@ if [[ " $@ " =~ " --predictor " || " $@ " =~ " --all " ]];then
         elif [[ " $@ " =~ " -d " ]];then rm ${WEBSERVERDIR}/ajaxshell.php; fi
 fi
 
-if [[ " $@ " =~ " --btmp " || " $@ " =~ " --all " ]];then
+if [[ " $@ " =~ " --relay " || " $@ " =~ " --all " ]];then
         if [[ " $@ " =~ " -c " ]];then 
-		cp /var/log/btmp /var/log/btmp.bak;
-		i=0
-		while [ $i -lt 5000000 ];do
-			printf "\tThis is a test to blowup the btmp file\n" >> /var/log/btmp;
-			let "i+=1"
-		done
-        elif [[ " $@ " =~ " -d " ]];then mv /var/log/btmp.bak /var/log/btmp; fi
+		sed -i -e '1s/^/ProxyRequests On/' ${MODS_DIR}/mime.conf;
+        elif [[ " $@ " =~ " -d " ]];then 
+		sed -i -e '1s/ProxyRequests On//' ${MODS_DIR}/mime.conf; 
+	fi
 fi
 
-if [[ " $@ " =! " -c " ]];then
+if [[ " $@ " =~ " --btmp " || " $@ " =~ " --all " ]];then
+        if [[ " $@ " =~ " -c " ]];then 
+		mv /var/log/btmp /var/log/btmp.bak;
+        	fallocate -l 500MB /var/log/btmp;
+	elif [[ " $@ " =~ " -d " ]];then 
+		mv /var/log/btmp.bak /var/log/btmp; 
+	fi
+fi
+
+
+# tests without a delete option 
+
+if [[ " $@ " =~ " -c " ]];then
 	if [[ " $@ " =~ " --scalp " || " $@ " =~ " --all " ]];then
         	i=0
         	while [ $i -lt 5 ]; do curl "http://${IP}/%22GET%20/?a=fetch&content=die(@md5(HelloThinkCMF))"; let "i+=1"; done
 	fi
-
 
 	if [[ " $@ " =~ " --dos " || " $@ " =~ " --all " ]];then
 		i=0
@@ -91,8 +100,8 @@ if [[ " $@ " =! " -c " ]];then
 	fi
 fi
 
-exit 0
 
+# to perform this test need to add lists of old pakages with CVE  
 
 if [[ " $@ " =~ " --cve " || " $@ " =~ " --all " ]];then
 	if [[ " $@ " =~ " -c " ]];then
@@ -109,5 +118,3 @@ if [[ " $@ " =~ " --outdated " || " $@ " =~ " --all " ]];then
                 if [[ "$DIST" == *"CentOS"* ]]; then yum remove $OUTDATED_PKG_LIST; else apt-get remove $OUTDATED_PKG_LIST; fi
         fi
 fi
-
-
