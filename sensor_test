@@ -1,0 +1,113 @@
+#!/bin/bash
+
+## Secopx Sensor Test File ##
+# version: 1.0
+# author: Gil Stolar 
+# copytight 2021 Secopx LTD
+
+WEBSERVERDIR=$(sed -n -e 's/^.*WEBSERVER_DIR: //p' /opt/IntruSense-v30/secopx.conf);
+WORKDIR=$(pwd)
+IP=$(hostname -I | awk '{print $1}')
+DIST=$(cat /etc/*-release | head -n 1 )
+
+PKG_WITH_KNOWNCVE=""
+OUTDATED_PKG_LIST=""
+
+#NOT TESTED :: ModSecurity
+# AIDE will be tested when any file is being created on the web server directory
+
+
+if [[  "${1}" == "--help" || "${1}" == "-h" || $# -lt 2 || ! " $@ " =~ " -c " || ! " $@ " =~ " -d " ]];then
+	echo "
+Run all tests with:	--all 		
+Or selective tests by adding options:
+			--chkrootkit
+			--yara
+			--webshells
+			--coinscan
+			--predictor
+			--btmp
+			--scalp
+			--dos
+			--cve
+			--outdated
+
+You must add one of the options:
+			-c 	To creaet test	
+			-d	To delete test	
+"
+	exit 0
+fi
+
+if [[ " $@ " =~ " -c "]];then echo "Creating test files on ${IP}, Make sure secopx service is running."
+if [[ " $@ " =~ " -d "]];then echo "Deleting test files from ${IP}."
+
+if [[ " $@ " =~ " --chkrootkit " || " $@ " =~ " --all " ]];then
+        if [[ " $@ " =~ " -c " ]];then touch /tmp/ramen.tgz;
+        elif [[ " $@ " =~ " -d " ]];then rm /tmp/ramen.tgz; fi
+fi
+
+if [[  " $@ " =~ " --yara " || " $@ " =~ " --all " ]];then
+        if [[ " $@ " =~ " -c " ]];then cp ${WORKDIR}/zadon/RAASNet.py ${WEBSERVERDIR}/RASSNet.py;
+        elif [[ " $@ " =~ " -d " ]];then rm ${WEBSERVERDIR}/RASSNet.py; fi
+fi
+
+if [[ " $@ " =~ " --webshells " || " $@ " =~ " --all " ]];then
+        if [[ " $@ " =~ " -c " ]];then cp ${WORKDIR}/zadon/c99.php ${WEBSERVERDIR}/c99.php;
+        elif [[ " $@ " =~ " -d " ]];then rm ${WEBSERVERDIR}/c99.php; fi
+fi
+
+if [[ " $@ " =~ " --coinscan " || " $@ " =~ " --all " ]];then
+        if [[ " $@ " =~ " -c " ]];then cp ${WORKDIR}/zadon/miner.js ${WEBSERVERDIR}/miner.js;
+        elif [[ " $@ " =~ " -d " ]];then rm ${WEBSERVERDIR}/miner.js; fi
+fi
+
+if [[ " $@ " =~ " --predictor " || " $@ " =~ " --all " ]];then
+        if [[ " $@ " =~ " -c " ]];then cp ${WORKDIR}/zadon/ajaxshell.php ${WEBSERVERDIR}/ajaxshell.php;
+        elif [[ " $@ " =~ " -d " ]];then rm ${WEBSERVERDIR}/ajaxshell.php; fi
+fi
+
+if [[ " $@ " =~ " --btmp " || " $@ " =~ " --all " ]];then
+        if [[ " $@ " =~ " -c " ]];then 
+		cp /var/log/btmp /var/log/btmp.bak;
+		i=0
+		while [ $i -lt 5000000 ];do
+			printf "\tThis is a test to blowup the btmp file\n" >> /var/log/btmp;
+			let "i+=1"
+		done
+        elif [[ " $@ " =~ " -d " ]];then mv /var/log/btmp.bak /var/log/btmp; fi
+fi
+
+if [[ " $@ " =! " -c " ]];then
+	if [[ " $@ " =~ " --scalp " || " $@ " =~ " --all " ]];then
+        	i=0
+        	while [ $i -lt 5 ]; do curl "http://${IP}/%22GET%20/?a=fetch&content=die(@md5(HelloThinkCMF))"; let "i+=1"; done
+	fi
+
+
+	if [[ " $@ " =~ " --dos " || " $@ " =~ " --all " ]];then
+		i=0
+        	while [ $i -lt 50 ]; do curl  "http://${IP}/%22GET%20/?a=fetch&content=die(@md5(HelloThinkCMF))"; let "i+=1"; done
+	fi
+fi
+
+exit 0
+
+
+if [[ " $@ " =~ " --cve " || " $@ " =~ " --all " ]];then
+	if [[ " $@ " =~ " -c " ]];then
+		if [[ "$DIST" == *"CentOS"* ]]; then yum install $PKG_WITH_KNOWN_CVE; else apt-get install $PKG_WITH_KNOWN_CVE;	fi
+	elif [[ " $@ " =~ " -d " ]];then 
+		if [[ "$DIST" == *"CentOS"* ]]; then yum remove $PKG_WITH_KNOWN_CVE; else apt-get remove $PKG_WITH_KNOWN_CVE; fi
+	fi
+fi
+
+if [[ " $@ " =~ " --outdated " || " $@ " =~ " --all " ]];then
+        if [[ " $@ " =~ " -c " ]];then
+                if [[ "$DIST" == *"CentOS"* ]]; then yum install $OUTDATED_PKG_LIST; else apt-get install $OUTDATED_PKG_LIST; fi
+        elif [[ ${2} == "-d" ]];then
+                if [[ "$DIST" == *"CentOS"* ]]; then yum remove $OUTDATED_PKG_LIST; else apt-get remove $OUTDATED_PKG_LIST; fi
+        fi
+fi
+
+
